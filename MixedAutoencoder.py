@@ -18,6 +18,11 @@ from keras import layers, losses
 from keras.utils import Progbar
 from keras import backend as K
 import json
+
+def setRandom(seed):
+    tf.random.set_seed(seed)
+    random.seed(seed)
+
 class Autoencoder(Model):
   def __init__(self, latent_dim):
     super(Autoencoder, self).__init__()
@@ -35,12 +40,6 @@ class Autoencoder(Model):
 
   def set_decoder(self, decoder):
     self.decoder=decoder
-
-mse = losses.MeanSquaredError()
-hu = losses.Huber(delta=0.1)
-# loss function, might add wacky stuff here later
-
-# optimizer maker function
 
 
 
@@ -93,21 +92,23 @@ class MixedAutoencoder():
             "encoder_proximity_training": [],
             "plot": [False, 2, [0, 1]]
         }
-        train_config = []
         for setting in settings:
-            for st in  settings[setting]:
-                for i, s in enumerate(st):
-                    if s == "$all":
-                        st[i] = self.key_list
-                if setting == "training":
-                    for e in st[0]:
-                        for d in st[1]:
-                            config[setting].append([e, d, st[2], st[3]])
-                if setting == "encoder_proximity_training":
-                    for e in st[0]:
-                        config[setting].append([e, st[1]])
             if setting == "plot":
                 config[setting] = settings[setting]
+            else:
+                for st in  settings[setting]:
+                    for i, s in enumerate(st):
+                        if s == "$all":
+                            st[i] = self.key_list
+                        elif type(s) == type(""):
+                            st[i] = [s]
+                    if setting == "training":
+                        for e in st[0]:
+                            for d in st[1]:
+                                config[setting].append([e, d, st[2], st[3]])
+                    if setting == "encoder_proximity_training":
+                        for e in st[0]:
+                            config[setting].append([e, st[1]])
         return config
 
 
@@ -115,21 +116,21 @@ class MixedAutoencoder():
 
     def train_set(self, train, epochs, config, batch_size=32, track_num = None, validation_split = 0.2):
         
-        train_arr = [{d: train[d].values[i] for d in self.eList}for i in range(len(train[self.eList[0]]))]
+        train_arr = [{d: train[d].values[i] for d in self.key_list}for i in range(len(train[self.key_list[0]]))]
 
         random.shuffle(train_arr)
         train_data = train_arr
         #train_data = train_arr[:int(len(train_arr)*(1-validation_split))]
         #train_val = train_arr[int(len(train_arr)*(1-validation_split)):]
         
-        train_batchs = [{d: [train_data[n][d] for n in range(i, i+int(batch_size*(1-validation_split)))] for d in self.eList} for i in range((len(train_data)//batch_size)+1) if len(train_data[i:i+batch_size])]
-        val_batchs = [{d: [train_data[n][d] for n in range(i+int(batch_size*(1-validation_split)), i+batch_size)] for d in self.eList} for i in range((len(train_data)//batch_size)+1) if len(train_data[i:i+batch_size])]
-        #train_val_batches = {d: [train_val[d] for t in train_val] for d in self.eList}
-
+        train_batchs = [{d: np.array([train_data[n][d] for n in range(i, i+int(batch_size*(1-validation_split)))]) for d in self.key_list} for i in range((len(train_data)//batch_size)+1) if len(train_data[i:i+batch_size])]
+        val_batchs = [{d: np.array([train_data[n][d] for n in range(i+int(batch_size*(1-validation_split)), i+batch_size)]) for d in self.key_list} for i in range((len(train_data)//batch_size)+1) if len(train_data[i:i+batch_size])]
+        #train_val_batches = {d: [train_val[d] for t in train_val] for d in self.key_list}
+        #print(train_batchs[1]["b"].shape)
 
         if config['plot'][0]:
-            self.make_scatter(np.concatenate(self.plot_to_latent_space([d.values[track_num:track_num+1] for d in train], config['plot'][1], config['plot'][2])))
-            self.make_scatter(np.concatenate(self.plot_to_latent_space([t.values for t in train], config['plot'][1], config['plot'][2])))
+            self.make_scatter(np.concatenate(self.plot_to_latent_space({k: train[k].values[track_num:track_num+1] for k in self.key_list})), config['plot'][1], config['plot'][2])
+            self.make_scatter(np.concatenate(self.plot_to_latent_space({k: train[k].values for k in self.key_list})), config['plot'][1], config['plot'][2])
         for epoch in range(epochs):
             print(f'epoch {epoch}')
             metrics_names = ['loss','val_loss', 'accuracy'] 
@@ -144,9 +145,9 @@ class MixedAutoencoder():
                 values=[('loss',loss), ('val_loss',val), ('accuracy', acc)]
                 pb_i.add(1, values=values)
 
-            if track_num != None:
-                self.make_scatter(np.concatenate(self.plot_to_latent_space([d.values[track_num:track_num+1] for d in train])))
-                self.make_scatter(np.concatenate(self.plot_to_latent_space([t.values for t in train])))
+            if config['plot'][0]:
+                self.make_scatter(np.concatenate(self.plot_to_latent_space({k: train[k].values[track_num:track_num+1] for k in self.key_list})), config['plot'][1], config['plot'][2])
+                self.make_scatter(np.concatenate(self.plot_to_latent_space({k: train[k].values for k in self.key_list})), config['plot'][1], config['plot'][2])
         plt.show()
 
     @tf.function
@@ -159,10 +160,17 @@ class MixedAutoencoder():
             e = config['training'][i][0]
             d = config['training'][i][1]
             #gradient tape tracks the gradient
+
             with tf.GradientTape() as etape, tf.GradientTape() as dtape:
+                #print(len(tf.stack(train_batch[e])))
+                
+
+                
                 pred = decoders[d](encoders[e](tf.stack(train_batch[e]), training = config['training'][i][2]), training = config['training'][i][3])
-                losses = self.loss(tf.stack(train_batch[e]), pred)
+                
+                losses = self.loss(tf.stack(train_batch[d]), pred)
                 losses_list.append(losses)
+            
             if config['training'][i][2]:
                 if e in egradients.keys():
                     egradients[e].append(etape.gradient(losses,encoders[e].trainable_variables))
@@ -175,17 +183,17 @@ class MixedAutoencoder():
                     dgradients[d] = [dtape.gradient(losses,decoders[d].trainable_variables)]
         if config['encoder_proximity_training']:
             with tf.GradientTape(persistent=True) as tape:
-                enc_list = []
+                enc_list = {}
                 for e in config['encoder_proximity_training']:
-                    enc_list.append(encoders[e[0]](tf.stack(train_batch[e[0]]), training=e[1]))
-                eloss_list = []
+                    enc_list[e[0]] = (encoders[e[0]](tf.stack(train_batch[e[0]]), training=e[1]))
+                eloss_list = {}
                 for e in config['encoder_proximity_training']:
                     eloss = 0#-hloss(enc_list[e], tf.roll(enc_list[e], shift=1, axis=0))
                     for e2 in config['encoder_proximity_training']:
                         if e[0] != e2[0]:
-                            eloss += self.loss(enc_list[e[0]], enc_list[e2[1]])
+                            eloss += self.loss(enc_list[e[0]], enc_list[e2[0]])
                     
-                    eloss_list.append(eloss)
+                    eloss_list[e[0]] = eloss
 
             for e in config['encoder_proximity_training']:
                 if e[1]:
@@ -199,7 +207,7 @@ class MixedAutoencoder():
         return sum(losses_list)/len(losses_list)
 
     @tf.function
-    def val_step(self, encoders, decoders, val_batch, order, config):
+    def val_step(self, val_batch, encoders, decoders, order, config):
         losses_list = []
         acc_list = []
         for i in order:
@@ -209,7 +217,7 @@ class MixedAutoencoder():
             pred = decoders[d](encoders[e](tf.stack(val_batch[e]), training = False), training = False)
             losses = self.loss(tf.stack(val_batch[d]), pred)
             losses_list.append(losses)
-            acc_list.append(self.soft_acc(tf.stack(val_batch[d]), pred))
+            acc_list.append(self.soft_acc(tf.cast(tf.stack(val_batch[d]), tf.float32), pred))
 
         return sum(losses_list)/len(losses_list), sum(acc_list)/len(acc_list)
     
@@ -219,14 +227,12 @@ class MixedAutoencoder():
             self.autoencoders[i].evaluate(test[self.pair_tuple[i][0]].values,test[self.pair_tuple[i][1]].values)
             print(f'compared to average: {np.mean(np.square(np.array(test[self.pair_tuple[i][1]].values)))}')
 
-    def plot_to_latent_space(self, data, idx = None):
-        if idx == None:
-            idx = list(range(len(data)))
-        return np.array([self.encoders[idx[i]].predict(d, verbose = False) for i, d in enumerate(data)])
+    def plot_to_latent_space(self, data):
+        return np.array([self.encoders[i].predict(d, verbose = False) for i, d in data.items()])
 
     def map_latent_space(self, res):
-        mapqL = []
-        for i in range(len(self.decoders)):
+        mapqL = {}
+        for i in self.key_list:
             points = []
 
             for y in range(res):
@@ -239,8 +245,8 @@ class MixedAutoencoder():
                 map.append([m[y*res+x] for x in range(res)])
 
             mapq = [[[x[q] for x in y] for y in map[::-1]] for q in range(self.input_dims[i])]
-            mapqL.append(mapq)
-        return np.array(mapqL)
+            mapqL[i] = np.array(mapq)
+        return
 
     def make_scatter(self, item, dim, axis):
         if dim == 2:
@@ -272,7 +278,7 @@ class MixedAutoencoder():
         return (K.mean(K.equal(K.round(y_true), K.round(y_pred))) + K.mean(K.equal(tf.math.round(y_true), tf.math.floor(y_pred))) + K.mean(K.equal(tf.math.round(y_true), tf.math.ceil(y_pred))))/2.0
     def loss(self, train, pred):
         return self.mse(train, pred)
-    def optimizer():
+    def optimizer(self):
         return tf.keras.optimizers.Adam(1e-4)
 
     @tf.function
@@ -311,11 +317,34 @@ class MixedAutoencoder():
             ax = fig.add_subplot()
             hst = ax.hist(errors, bins=50)
             plt.pause(0.01)
+    def show_error_accuracy(self, test):
+        errors = []
+        for i in range(self.num_ae):
+            #print(f'calculating for {self.pair_tuple[i]}')
+            pred = self.autoencoders[i].predict(test[self.pair_tuple[i][0]].values, verbose = False)
+            
+            #print(pred.shape)
+            for n in range(len(pred)):
+                for q in range(len(pred[n])):
+                    errors.append(abs(pred[n][q] - test[self.pair_tuple[i][1]].values[n][q]))
+        for p in [0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95]:
+            e_min = 0
+            e_max = 5
+            e_mid = (e_min + e_max)/2
+            while e_max - e_min > 0.05:
+                acc = len([e for e in errors if e <= e_mid])/len(errors)
+                if acc < p:
+                    e_min = e_mid
+                else:
+                    e_max = e_mid
+                e_mid = (e_min + e_max)/2
+            print(f'To achive {p} accuracy, an error of +-{e_max} is required.')
     def show_binary_accuracy(self, test):
         errors = []
         for i in range(self.num_ae):
             if self.pair_tuple[i][0] != self.pair_tuple[i][1]:
                 #print(f'calculating for {self.pair_tuple[i]}')
+                
                 pred = self.autoencoders[i].predict(test[self.pair_tuple[i][0]].values, verbose = False)
                 
                 #print(pred.shape)
@@ -358,7 +387,7 @@ class Mixer:
         for k in key_list:
             cur_encoder = tf.keras.Sequential([tf.keras.layers.InputLayer(input_shape=(input_dims[k],))] + [Dense(n, activation='relu') for n in hidden_layer_shapes[k]] + [Dense(latent_dim, activation='tanh')])
 
-            cur_decoder = tf.keras.Sequential([tf.keras.layers.InputLayer(input_shape=(input_dims[k],))] + [Dense(n, activation='relu') for n in hidden_layer_shapes[k][::-1]] + [Dense(input_dims[k], activation=None)])
+            cur_decoder = tf.keras.Sequential([tf.keras.layers.InputLayer(input_shape=(latent_dim,))] + [Dense(n, activation='relu') for n in hidden_layer_shapes[k][::-1]] + [Dense(input_dims[k], activation=None)])
 
             encoders[k] = cur_encoder
             decoders[k] = cur_decoder
