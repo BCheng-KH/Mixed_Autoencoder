@@ -79,14 +79,13 @@ def split_strat(data, num_sets = 3):
         b += increment                                  # then increment a and b before moving on to next set
     return setsDict #['set1'], setsDict['set2'], setsDict['set3']]
 
-def make_train_test(datas, split):
-    train_datas = [d[:int(datas.shape[0]*split)] for d in datas]
-    test_datas = [d[int(datas.shape[0]*split):] for d in datas]
+def make_train_test(datas, split, keys):
+    train_datas = {k: datas[keys[k]][:int(data.shape[0]*split)] for k in keys}
+    test_datas = {k: datas[keys[k]][int(data.shape[0]*0.8):] for k in keys}
     return train_datas, test_datas
 
-def preprocessing(data, num_sets, split):
-    data = pd.read_csv(f'data/16PF/data.csv', sep="\t")
+def preprocessing(data, num_sets, split, keys):
     final_data = clean_data(data)
     final_data = split_strat(final_data,num_sets)
-    train, test = make_train_test(final_data, split)
+    train, test = make_train_test(final_data, split, keys)
     return train, test
