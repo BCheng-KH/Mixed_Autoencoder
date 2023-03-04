@@ -25,7 +25,7 @@ def split_strat(data, num_sets = 3, keys = []):
     # general idea is to split the data by question type letter(A), and then randomly select 1/3 of each letter to form
     # three mixed data sets
     # creating a dict of data frames for each letter in ASCII
-    for i in range(num_sets - len(keys)):
+    for i in range(1, num_sets - len(keys)+1):
         keys.append(f'set{str(i)}')
     columnsList = list(data)
     letterDict = {}
@@ -112,7 +112,7 @@ def split(data, split_labels = None):
         labels = list(data)
         random.shuffle(labels)
         split_labels = {"set1": labels[:50], "set2": labels[50:100], "set3": labels[100:150]}
-    return {k: data[s] for k, s in split_labels.items}
+    return {k: data[s] for k, s in split_labels.items()}
 
 
 
@@ -128,5 +128,5 @@ def get_input_dims(train_data):
 def preprocessing(data, num_sets, split, keys):
     final_data = clean_data(data)
     final_data = split_strat(final_data,num_sets)
-    train, test = make_train_test(final_data, split, keys)
+    train, test = make_train_test(final_data, 0.8)
     return train, test

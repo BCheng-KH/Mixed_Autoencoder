@@ -60,6 +60,14 @@ class MixedAutoencoder():
         self.hidden_layer_shapes = hidden_layer_shapes
         
         self.mse = losses.MeanSquaredError()
+    def add_set(self, encoders, decoders, input_dims, key_list, hidden_layer_shapes):
+        self.encoders |= encoders
+        self.decoders |= decoders
+        self.input_dims |= input_dims
+        self.key_list += key_list
+        self.optimizer_encode |= {e: self.optimizer() for e in key_list}
+        self.optimizer_decode |= {d: self.optimizer() for d in key_list}
+        self.hidden_layer_shapes |= hidden_layer_shapes
     def copy(self, other):
         self.encoders = other.encoders
         self.decoders = other.decoders
@@ -114,7 +122,7 @@ class MixedAutoencoder():
 
 
 
-    def train_set(self, train, epochs, config, batch_size=32, track_num = None, validation_split = 0.2):
+    def train_set(self, train, epochs, config, batch_size=32, track_num = None, validation_split = 0.2, verbose = True):
         
         train_arr = [{d: train[d].values[i] for d in self.key_list}for i in range(len(train[self.key_list[0]]))]
 
@@ -132,18 +140,23 @@ class MixedAutoencoder():
             self.make_scatter(np.concatenate(self.plot_to_latent_space({k: train[k].values[track_num:track_num+1] for k in self.key_list})), config['plot'][1], config['plot'][2])
             self.make_scatter(np.concatenate(self.plot_to_latent_space({k: train[k].values for k in self.key_list})), config['plot'][1], config['plot'][2])
         for epoch in range(epochs):
-            print(f'epoch {epoch}')
-            metrics_names = ['loss','val_loss', 'accuracy'] 
-            pb_i = Progbar(len(train_batchs), stateful_metrics=metrics_names)
+            if verbose:
+                print(f'epoch {epoch}')
+                metrics_names = ['loss','val_loss', 'accuracy'] 
+                pb_i = Progbar(len(train_batchs), stateful_metrics=metrics_names)
             order = list(range(len(config["training"])))
             random.shuffle(order)
             for i in range(len(train_batchs)):
-                
-                loss = self.train_step(train_batchs[i], self.encoders, self.decoders, order, self.optimizer_encode, self.optimizer_decode, config)
-                val, acc = self.val_step(val_batchs[i], self.encoders, self.decoders, order, config)
-                
-                values=[('loss',loss), ('val_loss',val), ('accuracy', acc)]
-                pb_i.add(1, values=values)
+                if epoch == i == 0:
+                    tf.config.run_functions_eagerly(True)
+                    loss = self.train_step(train_batchs[i], self.encoders, self.decoders, order, self.optimizer_encode, self.optimizer_decode, config)
+                    tf.config.run_functions_eagerly(False)
+                else:
+                    loss = self.train_step(train_batchs[i], self.encoders, self.decoders, order, self.optimizer_encode, self.optimizer_decode, config)
+                if verbose:
+                    val, acc = self.val_step(val_batchs[i], self.encoders, self.decoders, order, config)
+                    values=[('loss',loss), ('val_loss',val), ('accuracy', acc)]
+                    pb_i.add(1, values=values)
 
             if config['plot'][0]:
                 self.make_scatter(np.concatenate(self.plot_to_latent_space({k: train[k].values[track_num:track_num+1] for k in self.key_list})), config['plot'][1], config['plot'][2])
@@ -203,6 +216,7 @@ class MixedAutoencoder():
                 optimizer_encode[e].apply_gradients(zip(gradient, encoders[e].trainable_variables))
         for d in dgradients:
             for gradient in dgradients[d]:
+                
                 optimizer_decode[d].apply_gradients(zip(gradient, decoders[d].trainable_variables))
         return sum(losses_list)/len(losses_list)
 
@@ -339,7 +353,7 @@ class MixedAutoencoder():
                     e_max = e_mid
                 e_mid = (e_min + e_max)/2
             print(f'To achive {p} accuracy, an error of +-{e_max} is required.')
-    def show_binary_accuracy(self, test):
+    def total_binary_accuracy(self, test):
         errors = []
         for i in range(self.num_ae):
             if self.pair_tuple[i][0] != self.pair_tuple[i][1]:
@@ -351,12 +365,73 @@ class MixedAutoencoder():
                 for n in range(len(pred)):
                     for q in range(len(pred[n])):
                         if test[self.pair_tuple[i][1]].values[n][q] != 0:
-                            errors.append(round(pred[n][q]) * test[self.pair_tuple[i][1]].values[n][q])
-                        else:
-                            errors.append(int(round(pred[n][q]))*2 - 1)
+                            errors.append(pred[n][q] * test[self.pair_tuple[i][1]].values[n][q])
+                        # else:
+                        #     errors.append(int(round(pred[n][q]) == 0)*2 - 1)
         acc = len([e for e in errors if e > 0])/len(errors)
-        print(f'binary accuracy is: {acc}')
-
+        return acc
+    def show_total_binary_accuracy(self, test):
+        acc = self.total_binary_accuracy(test)
+        print(f'Binary accuracy: {acc}')
+    def subtotal_binary_accuracy(self, keys, test):
+        errors = []
+        for i in range(self.num_ae):
+            if self.pair_tuple[i][0] != self.pair_tuple[i][1] and self.pair_tuple[i][0] in keys and self.pair_tuple[i][1] in keys:
+                #print(f'calculating for {self.pair_tuple[i]}')
+                
+                pred = self.autoencoders[i].predict(test[self.pair_tuple[i][0]].values, verbose = False)
+                
+                #print(pred.shape)
+                for n in range(len(pred)):
+                    for q in range(len(pred[n])):
+                        if test[self.pair_tuple[i][1]].values[n][q] != 0:
+                            errors.append(pred[n][q] * test[self.pair_tuple[i][1]].values[n][q])
+                        # else:
+                        #     errors.append(int(round(pred[n][q]) == 0)*2 - 1)
+        acc = len([e for e in errors if e > 0])/len(errors)
+        return acc
+    def subshow_total_binary_accuracy(self, keys, test):
+        acc = self.total_binary_accuracy(keys, test)
+        print(f'Binary accuracy: {acc}')
+    def encoder_binary_accuracy(self, keys, test):
+        errors = []
+        for i in range(self.num_ae):
+            if self.pair_tuple[i][0] != self.pair_tuple[i][1] and self.pair_tuple[i][0] in keys:
+                #print(f'calculating for {self.pair_tuple[i]}')
+                
+                pred = self.autoencoders[i].predict(test[self.pair_tuple[i][0]].values, verbose = False)
+                
+                #print(pred.shape)
+                for n in range(len(pred)):
+                    for q in range(len(pred[n])):
+                        if test[self.pair_tuple[i][1]].values[n][q] != 0:
+                            errors.append(pred[n][q] * test[self.pair_tuple[i][1]].values[n][q])
+                        # else:
+                        #     errors.append(int(round(pred[n][q]) == 0)*2 - 1)
+        acc = len([e for e in errors if e > 0])/len(errors)
+        return acc
+    def decoder_binary_accuracy(self, keys, test):
+        errors = []
+        for i in range(self.num_ae):
+            if self.pair_tuple[i][0] != self.pair_tuple[i][1] and self.pair_tuple[i][1] in keys:
+                #print(f'calculating for {self.pair_tuple[i]}')
+                
+                pred = self.autoencoders[i].predict(test[self.pair_tuple[i][0]].values, verbose = False)
+                
+                #print(pred.shape)
+                for n in range(len(pred)):
+                    for q in range(len(pred[n])):
+                        if test[self.pair_tuple[i][1]].values[n][q] != 0:
+                            errors.append(pred[n][q] * test[self.pair_tuple[i][1]].values[n][q])
+                        # else:
+                        #     errors.append(int(round(pred[n][q]) == 0)*2 - 1)
+        acc = len([e for e in errors if e > 0])/len(errors)
+        return acc
+    def show_binary_accuracy(self, keys, test):
+        acc_e = self.encoder_binary_accuracy(keys, test)
+        acc_d = self.decoder_binary_accuracy(keys, test)
+        print(f'Encoder binary accuracy: {acc_e}')
+        print(f'Decoder binary accuracy: {acc_d}')
 
 
 
@@ -401,10 +476,19 @@ class Mixer:
             'hidden_layer_shapes': mix.hidden_layer_shapes
         }
         return bare
-    def make_new(self, hidden_layer_shapes, latent_dim, input_dims, key_list):
+    def make_new(self, hidden_layer_shapes, latent_dim, input_dims):
+        key_list = list(hidden_layer_shapes.keys())
         encoders, decoders = self.en_de_create(key_list, latent_dim, input_dims, hidden_layer_shapes)
         mix = MixedAutoencoder(encoders, decoders, latent_dim, input_dims, key_list, hidden_layer_shapes)
         mix.make_pairs([(i, j) for i in key_list for j in key_list])
+        return mix
+    
+    def add_new(self, mix, hidden_layer_shapes, input_dims):
+        key_list = list(hidden_layer_shapes.keys())
+        latent_dim =  mix.latent_dim
+        encoders, decoders = self.en_de_create(key_list, latent_dim, input_dims, hidden_layer_shapes)
+        mix.add_set(encoders, decoders, input_dims, key_list, hidden_layer_shapes)
+        mix.make_pairs([(i, j) for i in mix.key_list for j in mix.key_list if i in key_list or j in key_list])
         return mix
 
     def save_to_label(self, mix, extra, label):
