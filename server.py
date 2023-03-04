@@ -4,11 +4,14 @@ from DataCleaning import *
 import DataCleaning
 import pandas as pd
 import random
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from pywebio.output import *
 from pywebio.input import *
 from pywebio import start_server
+import io
+matplotlib.use('agg')
 seed = 42
 MixedAutoencoder.setRandom(seed)
 DataCleaning.setRandom(seed)
@@ -22,6 +25,7 @@ encoder = "demo"
 label = f'demo_{num_sets}_{latent_dim}_[{"_".join([str(s) for s in model_shape])}]'
 
 model, extra = mixer.load_from_label(label)
+model_3d, _extra = mixer.load_from_label(label+"_3d")
 #print(len(extra["columns"][encoder]))
 key_list = extra["key_list"]
 sets = [k for k in key_list if k != encoder]
@@ -72,7 +76,17 @@ def present_features(most, least):
          r_string += Qdict[l] + "\n"
     return r_string
 
-
+def plot(enc_3d):
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+    ax.set_xlim((-1,1))
+    ax.set_ylim((-1,1))
+    ax.set_zlim((-1,1))
+    scatter = ax.scatter(enc_3d[:, 0], enc_3d[:, 1], enc_3d[:, 2])
+    buf = io.BytesIO()
+    fig.savefig(buf)
+    return buf
+    
 
 
 
@@ -88,6 +102,8 @@ def pyWebInterface():
     decoder = sets[random.randrange(num_sets)]
 
     enc = model.make_encoding(responses, encoder)
+    enc_3d = model_3d.make_encoding(responses, encoder)
+    put_image(plot(enc_3d).getvalue())
     pred = model.make_decoding(enc, decoder)
     most = np.argsort((-np.array(pred[0])))[:5]
     least = np.argsort(np.array(pred[0]))[:5]
