@@ -284,6 +284,8 @@ class MixedAutoencoder():
         return self.decoders[d](self.encoders[e](tf.stack(inp), training = False), training = False)
     def make_encoding(self, inp, e):
         return self.encoders[e].predict(inp)
+    def make_decoding(self, inp, d):
+        return self.decoders[d].predict(inp)
 
 
     def soft_acc(self, y_true, y_pred):
@@ -390,8 +392,8 @@ class MixedAutoencoder():
                         #     errors.append(int(round(pred[n][q]) == 0)*2 - 1)
         acc = len([e for e in errors if e > 0])/len(errors)
         return acc
-    def subshow_total_binary_accuracy(self, keys, test):
-        acc = self.total_binary_accuracy(keys, test)
+    def show_subtotal_binary_accuracy(self, keys, test):
+        acc = self.subtotal_binary_accuracy(keys, test)
         print(f'Binary accuracy: {acc}')
     def encoder_binary_accuracy(self, keys, test):
         errors = []

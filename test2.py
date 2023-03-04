@@ -61,3 +61,4 @@ settings = {
 }
 autoencoder_set.train_set(train | dtrain, 20, autoencoder_set.make_train_config(settings = settings), batch_size = 64, verbose=True)
 autoencoder_set.show_binary_accuracy(demo_key_list, test | dtest)
+

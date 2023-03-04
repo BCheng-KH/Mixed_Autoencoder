@@ -3,7 +3,10 @@ import numpy as np
 import random
 def setRandom(seed):
     random.seed(seed)
-
+def clean_survey(data):
+    df = data.fillna(value=3)
+    df = (df.loc[(df!=0).all(axis=1)]-3)
+    return df
 def clean_data(data):
     #remove unwanted columns
     data.pop("age")
@@ -99,11 +102,12 @@ def split_n_strat(data, num_qa = 20):
 
     # creating a dict containing three different data frames for eat data "set"
     setQs = []
-    for letter in letterDict:
-        if letterDict[letter]:
-            setQs.append(letterDict[letter].pop())
-        if len(setQs) >= num_qa:
-            break
+    while len(setQs) < num_qa:
+        for letter in letterDict:
+            if letterDict[letter]:
+                setQs.append(letterDict[letter].pop())
+            if len(setQs) >= num_qa:
+                break
     return setQs
 
    
