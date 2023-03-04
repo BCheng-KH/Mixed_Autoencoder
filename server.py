@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pywebio.output import *
 from pywebio.input import *
-from pywebio.platform.tornado_http import start_server
+from pywebio import start_server
 seed = 42
 MixedAutoencoder.setRandom(seed)
 DataCleaning.setRandom(seed)
@@ -48,8 +48,6 @@ with open(f'data/16PF/16.PF.questions.csv') as f:
 def clip(m, M, v):
     return min(max(v, m), M)
 
-def server():
-    global model
 
 def present(Qlist, ans):
     r_string = ''
@@ -57,7 +55,7 @@ def present(Qlist, ans):
 
 
     # ask the question corresponding to the letter code, and add the user input to a dict
-    r_string += "predicted answers to the following questions: \n"
+    r_string += "predicted answers to the following questions: \n\n"
     for x in range (0, len(Qlist)):
         r_string += Qdict[Qlist[x]] + ": " + score_labels[str(clip(-2, 2, int(round(2*ans[0][x]))))] + "\n"
     return r_string
@@ -78,8 +76,8 @@ def present_features(most, least):
 
 
 
-def pyWebInterface(Qlist):
-    global model, Qdict, encoder
+def pyWebInterface():
+    global model, Qdict, encoder, Qlist
 
     put_text("Please answer the following questions on a scale from 1-5, with 1 being strongly disagree, and 5 being strongly agree")
     new = input_group('Questions',[radio(label=(Qdict[q]).replace('"', ''), options=[1,2,3,4,5], inline=True, name=str(q)) for q in Qlist])
@@ -97,5 +95,5 @@ def pyWebInterface(Qlist):
     #responses = responses.append(new, ignore_index=True)
     #return responses
 #Qlist = ['A1', 'A2', 'A3']    # helpful for testing so you don't have to answer so many q's
-if __name__ == "__main__":
-    start_server(pyWebInterface(Qlist), port=8080, remote_access = True)
+
+start_server(pyWebInterface, port=8080, remote_access = True)
