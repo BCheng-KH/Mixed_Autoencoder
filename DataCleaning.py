@@ -1,5 +1,8 @@
 import pandas as pd
+import numpy as np
 import random
+def setRandom(seed):
+    random.seed(seed)
 
 def clean_data(data):
     #remove unwanted columns
@@ -12,77 +15,115 @@ def clean_data(data):
     data.pop("P10")
 
     #replace zeros with three, questions not answered replaced with average value
-    return (data.loc[(data!=0).all(axis=1)]-3)
+    df = (data.loc[(data!=0).all(axis=1)]-3)
+    for i in range(-2, 3):
+        df = df.loc[~(df==i).all(axis=1)]
+    return df
 
-def split_strat(data, num_sets = 3):
+
+def split_strat(data, num_sets = 3, keys = []):
     # general idea is to split the data by question type letter(A), and then randomly select 1/3 of each letter to form
     # three mixed data sets
     # creating a dict of data frames for each letter in ASCII
-    framesDict = {}
-    for i in range(65, 81):
-        framesDict[i] = pd.DataFrame()
+    for i in range(num_sets - len(keys)):
+        keys.append(f'set{str(i)}')
+    columnsList = list(data)
+    letterDict = {}
+    for i in range (65, 81):
+        letterDict[i] = []
 
-    # running through data and sorting it into data frame based on letter
-    for i in range(65, 81):
-        for columns in data:
-            if chr(i) in columns:
-                framesDict[i][columns] = data[[columns]]
+    for i in range(65,81):
+        for question in columnsList:
+            if chr(i) in question:
+                letterDict[i].append(question)
+
+    for i in range (65, 81):
+        random.shuffle(letterDict[i])
 
     # creating a dict containing three different data frames for eat data "set"
-    setsDict = []
-    #set_list = ['set1', 'set2', 'set3']
-    set_list = list(range(num_sets))
-    for s in set_list:
-        setsDict.append(pd.DataFrame())
+    setsDict = {}
+    
+    for k in keys:
+        setsDict[k] = []
 
     # test code: works and prints the data set containing all A questions/answers
     #print (framesDict[65])
 
     # shuffles each dataframe so it's randomized when columns are later selected
-    for i in range (65, 81):
-        framesDict[i] = framesDict[i].sample(frac=1, axis=1)
-
-    # idea here was to use iloc to select values in a range from variables a - b
-    # and then increment a and b each time the "set" increments so that the data in each frame is split into the three sets
-    # not working tho lol
-
-    # calculate how many columns per "set" based on the amount of number of that letter question type
-    # cols = len(framesDict[65].axes[1])
-    # increment = int((cols - cols%3) /3) 
-
+    
     # go through each data frame, resetting a and b each time
-    remainders = pd.DataFrame()
+    remainders = []
     for i in range (65, 81):
-        cols = len(framesDict[i].axes[1])
+        cols = len(letterDict[i])
         increment = int((cols - cols%num_sets) /num_sets) 
-        remainders = framesDict[i].iloc[:,(cols//num_sets) * num_sets:].join(remainders)
+        remainders += letterDict[i][(cols//num_sets) * num_sets:]
         a = 0
-        b= increment 
-        for s in set_list:   
+        b = increment 
+        for s in keys:   
             # print(setsDict[s])                      # go through each of the three sets
             # print(framesDict[i].iloc[:,a:b])
             
-            setsDict[s] = framesDict[i].iloc[:,a:b].join(setsDict[s]  )     # and add on values from range a-b in the current letter/question dataframe
+            setsDict[s] += letterDict[i][a:b]     # and add on values from range a-b in the current letter/question dataframe
             # print(setsDict[s])  
             a += increment                                  # ^^^^ this line is probably the problem                        
             b += increment                                  # then increment a and b before moving on to next set
-    cols = len(remainders.axes[1])
+    cols = len(remainders)
     increment = int((cols - cols%num_sets) /num_sets) 
     a = 0
     b= increment 
-    for s in set_list:   
+    for s in keys:   
         # print(setsDict[s])                      # go through each of the three sets
         # print(framesDict[i].iloc[:,a:b])
-        setsDict[s] = remainders.iloc[:,a:b].join(setsDict[s]  )     # and add on values from range a-b in the current letter/question dataframe
+        setsDict[s] += letterDict[i][a:b]     # and add on values from range a-b in the current letter/question dataframe
         # print(setsDict[s])  
         a += increment                                  # ^^^^ this line is probably the problem                        
         b += increment                                  # then increment a and b before moving on to next set
-    return setsDict #['set1'], setsDict['set2'], setsDict['set3']]
+    return setsDict
 
-def make_train_test(datas, split, keys):
-    train_datas = {k: datas[keys[k]][:int(data.shape[0]*split)] for k in keys}
-    test_datas = {k: datas[keys[k]][int(data.shape[0]*0.8):] for k in keys}
-    return train_datas, test_datas
+def split_n_strat(data, num_qa = 20):
+    # general idea is to split the data by question type letter(A), and then randomly select 1/3 of each letter to form
+    # three mixed data sets
+    # creating a dict of data frames for each letter in ASCII
+    columnsList = list(data)
+    letterDict = {}
+    for i in range (65, 81):
+        letterDict[i] = []
+
+    for i in range(65,81):
+        for question in columnsList:
+            if chr(i) in question:
+                letterDict[i].append(question)
+
+    for i in range (65, 81):
+        random.shuffle(letterDict[i])
+
+    # creating a dict containing three different data frames for eat data "set"
+    setQs = []
+    for letter in letterDict:
+        if letterDict[letter]:
+            setQs.append(letterDict[letter].pop())
+        if len(setQs) >= num_qa:
+            break
+    return setQs
+
+   
+def split(data, split_labels = None):
+    if not split_labels:
+        labels = list(data)
+        random.shuffle(labels)
+        split_labels = {"set1": labels[:50], "set2": labels[50:100], "set3": labels[100:150]}
+    return {k: data[s] for k, s in split_labels.items}
+
+
+
+def make_train_test(data, split):
+    train_data = {k: data[k][:int(data[k].shape[0]*split)] for k in data}
+    test_data = {k: data[k][int(data[k].shape[0]*split):] for k in data}
+    return train_data, test_data
+
+def get_input_dims(train_data):
+    return {k: (np.array(train_data[k]).astype(float))[0].shape[0] for k in train_data}
+
 
 def preprocessing(data, num_sets, split, keys):
     final_data = clean_data(data)

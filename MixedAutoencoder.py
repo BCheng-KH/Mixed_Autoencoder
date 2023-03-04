@@ -351,10 +351,10 @@ class MixedAutoencoder():
                 for n in range(len(pred)):
                     for q in range(len(pred[n])):
                         if test[self.pair_tuple[i][1]].values[n][q] != 0:
-                            errors.append(pred[n][q] * test[self.pair_tuple[i][1]].values[n][q])
-                        #else:
-                            #errors.append(int(-0.5 < pred[n][q] < 0.5)*2 - 1)
-        acc = len([e for e in errors if e >= 0])/len(errors)
+                            errors.append(round(pred[n][q]) * test[self.pair_tuple[i][1]].values[n][q])
+                        else:
+                            errors.append(int(round(pred[n][q]))*2 - 1)
+        acc = len([e for e in errors if e > 0])/len(errors)
         print(f'binary accuracy is: {acc}')
 
 
