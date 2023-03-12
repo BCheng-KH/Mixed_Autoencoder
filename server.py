@@ -19,7 +19,7 @@ base_path = "."
 mixer = Mixer(base_path)
 
 num_sets = 4
-latent_dim = 7
+latent_dim = 8
 model_shape = []
 encoder = "demo"
 label = f'demo_{num_sets}_{latent_dim}_[{"_".join([str(s) for s in model_shape])}]'
