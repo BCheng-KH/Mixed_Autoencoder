@@ -355,6 +355,28 @@ class MixedAutoencoder():
                     e_max = e_mid
                 e_mid = (e_min + e_max)/2
             print(f'To achive {p} accuracy, an error of +-{e_max} is required.')
+    def total_accuracy(self, test):
+        errors = []
+        for i in range(self.num_ae):
+            if self.pair_tuple[i][0] != self.pair_tuple[i][1]:
+                errors.append(self.get_accuracy(self.autoencoders[i], test[self.pair_tuple[i][0]], test[self.pair_tuple[i][1]]))
+                
+        acc = sum(errors)/len(errors)
+        return acc
+    def show_total_accuracy(self, test):
+        acc = self.total_accuracy(test)
+        print(f'total accuracy: {acc}')
+    def subtotal_accuracy(self, keys, test):
+        errors = []
+        for i in range(self.num_ae):
+            if self.pair_tuple[i][0] != self.pair_tuple[i][1] and self.pair_tuple[i][0] in keys and self.pair_tuple[i][1] in keys:
+                errors.append(self.get_accuracy(self.autoencoders[i], test[self.pair_tuple[i][0]], test[self.pair_tuple[i][1]]))
+                
+        acc = sum(errors)/len(errors)
+        return acc
+    def show_subtotal_accuracy(self, keys, test):
+        acc = self.subtotal_accuracy(keys, test)
+        print(f'Binary accuracy: {acc}')
     def total_binary_accuracy(self, test):
         errors = []
         for i in range(self.num_ae):
